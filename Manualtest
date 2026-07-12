@@ -1,0 +1,114 @@
+const token = "PASTE_TOKEN_HERE";
+
+const reports = [
+  {
+    name: "PT",
+    url: "https://adpvistahcm.ad.esi.adp.com/ESSAPI/v1/VistaReports/Statutory/GetPTaxReport/24X7tech/001/2026APR/All?fileType=xlsx",
+  },
+  {
+    name: "LWF",
+    url: "https://adpvistahcm.ad.esi.adp.com/ESSAPI/v1/VistaReports/Statutory/GetLwfReport/24X7tech/001/2026APR/All?fileType=xlsx",
+  },
+];
+
+function getAuthorizationToken() {
+  return token.startsWith("Bearer ")
+    ? token
+    : `Bearer ${token}`;
+}
+
+function getFilename(contentDisposition, fallbackName) {
+  if (!contentDisposition) {
+    return fallbackName;
+  }
+
+  const utf8Match = contentDisposition.match(
+    /filename\*=UTF-8''([^;]+)/i,
+  );
+
+  if (utf8Match) {
+    return decodeURIComponent(
+      utf8Match[1].replace(/["']/g, "").trim(),
+    );
+  }
+
+  const normalMatch = contentDisposition.match(
+    /filename="?([^";]+)"?/i,
+  );
+
+  return normalMatch
+    ? normalMatch[1].trim()
+    : fallbackName;
+}
+
+async function downloadReport(report) {
+  console.log(`Requesting ${report.name} report...`);
+
+  try {
+    const response = await fetch(report.url, {
+      method: "GET",
+
+      headers: {
+        Authorization: getAuthorizationToken(),
+        Accept: "application/json, text/plain, */*",
+        "Cache-Control": "no-cache",
+      },
+
+      // Sends the existing Vista browser cookies.
+      credentials: "include",
+    });
+
+    console.log(
+      `${report.name}: ${response.status} ${response.statusText}`,
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error(`${report.name} failed:`, errorText);
+      return;
+    }
+
+    const blob = await response.blob();
+
+    const contentDisposition = response.headers.get(
+      "content-disposition",
+    );
+
+    const fallbackFilename =
+      `${report.name}_24X7tech_001_2026APR.zip`;
+
+    const filename = getFilename(
+      contentDisposition,
+      fallbackFilename,
+    );
+
+    const downloadUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+
+    link.href = downloadUrl;
+    link.download = filename;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(downloadUrl);
+    }, 5000);
+
+    console.log(`${report.name} downloaded: ${filename}`);
+  } catch (error) {
+    console.error(`${report.name} network error:`, error);
+  }
+}
+
+async function testReports() {
+  for (const report of reports) {
+    await downloadReport(report);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+
+testReports();
